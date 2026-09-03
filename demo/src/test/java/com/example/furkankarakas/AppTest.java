@@ -17,7 +17,26 @@ public class AppTest {
      */
 
     @Test
-    public void shouldAnswerWithTrue() {
-        assertTrue(true);
+    public void givenNonNullString_whenReversed_thenCorrect() {
+        String input = "hello";
+        String expected = "olleh";
+        String actual = StringUtils.reverse(input);
+        assertTrue(expected.equals(actual));
+    }
+
+    @Test
+    public void givenNullString_whenReversed_thenCorrect() {
+        String input = null;
+        String expected = "";
+        String actual = StringUtils.reverse(input);
+        assertTrue(expected.equals(actual));
+    }
+
+    @Test
+    public void givenString_whenCharacterArrayConverted_thenCorrect() {
+        String input = "hello";
+        Character[] expected = new Character[] { 'h', 'e', 'l', 'l', 'o' };
+        Character[] actual = StringUtils.toCharacterArray(input);
+        assertTrue(java.util.Arrays.equals(expected, actual));
     }
 }
