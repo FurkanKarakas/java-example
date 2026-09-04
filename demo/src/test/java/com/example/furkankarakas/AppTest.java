@@ -1,6 +1,8 @@
 package com.example.furkankarakas;
 
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -37,6 +39,6 @@ public class AppTest {
         String input = "hello";
         Character[] expected = new Character[] { 'h', 'e', 'l', 'l', 'o' };
         Character[] actual = StringUtils.toCharacterArray(input);
-        assertTrue(java.util.Arrays.equals(expected, actual));
+        assertArrayEquals(expected, actual);
     }
 }
