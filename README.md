@@ -122,6 +122,12 @@ Most of the time, you don't implement `Collector` from scratch; you use predefin
   List<String> list = stream.collect(Collectors.toList());
   ```
 
+  In order to collect the stream to a concrete implementation of a list, you can use `Collectors.toCollection` method with the constructor reference:
+
+  ```java
+  List<String> list = stream.collect(Collectors.toCollection(ArrayList::new));
+  ```
+
 * **`toSet()`**:
 
   ```java
