@@ -1146,3 +1146,119 @@ Java provides highly optimized collection classes tailored specifically for enum
 ### When to use Enums?
 
 Use an `enum` whenever you need to represent a **fixed, known set of related constant values** (e.g., user roles, application states, file permissions, payment methods).
+
+## Java Generic Interfaces
+
+A **generic interface** is an interface that declares one or more type parameters (`<T>`, `<K, V>`, etc.). It allows classes implementing the interface to specify exact data types, enforcing **compile-time type safety** and enabling **code reuse**.
+
+---
+
+### 1. Defining a Generic Interface
+
+Here is a generic repository interface for CRUD operations:
+
+```java
+public interface Repository<T, ID> {
+    void save(T entity);
+    T findById(ID id);
+    List<T> findAll();
+    void deleteById(ID id);
+}
+```
+
+---
+
+### 2. Implementing a Generic Interface
+
+There are two primary ways a class implements a generic interface:
+
+#### Way A: Specifying Concrete Types (Most Common)
+
+The class fixes the generic types when implementing the interface:
+
+```java
+public class UserRepository implements Repository<User, Long> {
+
+    @Override
+    public void save(User entity) {
+        System.out.println("Saving user: " + entity.getName());
+    }
+
+    @Override
+    public User findById(Long id) {
+        return new User(id, "Furkan");
+    }
+
+    @Override
+    public List<User> findAll() {
+        return List.of(new User(1L, "Furkan"), new User(2L, "Alice"));
+    }
+
+    @Override
+    public void deleteById(Long id) {
+        System.out.println("Deleted user with id: " + id);
+    }
+}
+```
+
+#### Way B: Keeping the Implementing Class Generic
+
+The class remains generic itself and passes the type parameters down:
+
+```java
+public class InMemoryRepository<T, ID> implements Repository<T, ID> {
+    private final Map<ID, T> storage = new HashMap<>();
+
+    @Override
+    public void save(T entity) {
+        // logic
+    }
+
+    @Override
+    public T findById(ID id) {
+        return storage.get(id);
+    }
+
+    @Override
+    public List<T> findAll() {
+        return new ArrayList<>(storage.values());
+    }
+
+    @Override
+    public void deleteById(ID id) {
+        storage.remove(id);
+    }
+}
+```
+
+---
+
+### 3. Built-in Examples from Java Standard Library
+
+Java uses generic interfaces extensively:
+
+1. **`java.lang.Comparable<T>`**
+
+   ```java
+   public class Person implements Comparable<Person> {
+       private int age;
+
+       @Override
+       public int compareTo(Person other) {
+           return Integer.compare(this.age, other.age);
+       }
+   }
+   ```
+
+2. **`java.util.function.Function<T, R>`**
+
+   ```java
+   Function<String, Integer> lengthMapper = String::length;
+   int len = lengthMapper.apply("Hello"); // 5
+   ```
+
+3. **`java.util.Map<K, V>`**
+
+   ```java
+   Map<String, User> userCache = new HashMap<>();
+   ```
