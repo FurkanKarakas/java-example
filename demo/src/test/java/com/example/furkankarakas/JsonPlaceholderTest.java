@@ -2,7 +2,11 @@ package com.example.furkankarakas;
 
 import org.junit.jupiter.api.Test;
 
+import io.restassured.common.mapper.TypeRef;
+
 import static io.restassured.RestAssured.given;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
@@ -118,5 +122,87 @@ public class JsonPlaceholderTest {
                 .body("[0].userId", equalTo(1))
                 .body("findAll { it.completed }.size()", equalTo(11))
                 .body("userId.unique()", equalTo(List.of(1))); // all belong to user 1
+    }
+
+    // ------------------------------------------------------------------
+    // Deserialization: map JSON responses directly to POJOs.
+    // Rest Assured uses Jackson (bundled) by default. POJOs need a
+    // no-args constructor and getters/setters; unknown fields are ignored.
+    // ------------------------------------------------------------------
+
+    @Test
+    public void getPost_deserializedToPojo() {
+        // .as(Post.class) converts the whole JSON body into a Post record.
+        // Note: JSON field "body" is mapped to the content() component
+        // via @JsonProperty("body") on the record.
+        Post post = given()
+                .baseUri(BASE_URI)
+                .when()
+                .get("/posts/1")
+                .then()
+                .statusCode(200)
+                .extract()
+                .as(Post.class);
+
+        assertEquals(1, post.userId());
+        assertEquals(1, post.id());
+        assertTrue(post.title().startsWith("sunt aut facere"));
+        assertTrue(post.content().startsWith("quia et suscipit")); // JSON "body"
+    }
+
+    @Test
+    public void getAllPosts_deserializedToListOfPojos() {
+        // Arrays need a TypeRef so generics survive type erasure
+        List<Post> posts = given()
+                .baseUri(BASE_URI)
+                .when()
+                .get("/posts")
+                .then()
+                .statusCode(200)
+                .extract()
+                .as(new TypeRef<List<Post>>() {
+                });
+
+        assertEquals(100, posts.size());
+        assertTrue(posts.stream().allMatch(p -> p.id() > 0));
+        assertTrue(posts.stream().allMatch(p -> p.title() != null));
+    }
+
+    @Test
+    public void getUser_deserializedWithNestedPojos() {
+        // Nested JSON objects map to nested POJO fields automatically
+        User user = given()
+                .baseUri(BASE_URI)
+                .when()
+                .get("/users/1")
+                .then()
+                .statusCode(200)
+                .extract()
+                .as(User.class);
+
+        assertEquals(1, user.id());
+        assertEquals("Bret", user.username());
+        assertEquals("Gwenborough", user.address().city());
+        assertTrue(user.address().geo().lat().startsWith("-37"));
+    }
+
+    @Test
+    public void createPost_serializedFromRecord() {
+        // Serialization also works the other way: pass a record as the body
+        Post newPost = new Post(1, 0, "serialized from record", "Jackson converts this to JSON");
+
+        Post created = given()
+                .baseUri(BASE_URI)
+                .contentType("application/json")
+                .body(newPost) // record -> JSON request body
+                .when()
+                .post("/posts")
+                .then()
+                .statusCode(201)
+                .extract()
+                .as(Post.class);
+
+        assertEquals(101, created.id()); // JSONPlaceholder returns id 101
+        assertEquals("serialized from record", created.title());
     }
 }

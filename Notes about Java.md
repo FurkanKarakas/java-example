@@ -740,3 +740,409 @@ String s = 'A';       // ❌ compile error: char cannot convert to String
 
 * To convert: `String.valueOf('A')` → `"A"`, and `"A".charAt(0)` → `'A'`.
 * Java has no triple-quoted strings, but text blocks (`"""..."""`, Java 15+) use double quotes.
+
+## Java Generics and Type Erasure
+
+### What are Generics?
+
+Generics allow classes, interfaces, and methods to operate on specified types as parameters, providing **compile-time type safety** without manual casting.
+
+```java
+List<String> list = new ArrayList<>();
+list.add("hello");
+String s = list.get(0); // type-safe, no cast needed
+```
+
+### Are Generics Removed at Runtime? (Type Erasure)
+
+**Yes.** Java uses **Type Erasure** for backward compatibility:
+
+1. **Compile-time checking:** Types are validated at compile time.
+2. **Erasure:** The compiler removes generic type arguments and replaces them with their bound (or `Object`).
+3. **Casts inserted:** Necessary explicit casts are added to bytecode automatically.
+
+At runtime, `List<String>` and `List<Integer>` both become raw `List`.
+
+### Why Type Erasure instead of Monomorphization (separate classes per type like C++)?
+
+1. **Backward Compatibility:** Allowed existing Java 1.0–1.4 code to run on Java 5+ without breaking compiled binaries or JVM instructions.
+2. **Avoiding Code Bloat:** Only one `.class` file (`ArrayList.class`) is generated and loaded in Metaspace.
+3. **JVM Simplicity:** Enforced purely at compile time without major JVM changes.
+
+---
+
+## `TypeRef` / `TypeToken` and Runtime Type Erasure
+
+### Does `TypeRef` solve Type Erasure?
+
+**Partially.** `TypeRef` (or Jackson's `TypeReference` / Gson's `TypeToken`) does not change how the JVM erases generic instance types, but uses **subclass generic metadata retention** to capture type info at runtime.
+
+### How it works
+
+1. **Anonymous Subclass:** `new TypeRef<List<User>>() {}` creates an anonymous subclass of `TypeRef`.
+2. **Metadata Retained:** The Java compiler writes generic superclass signatures (`<List<User>>`) into the child class's constant pool metadata.
+3. **Reflection:** In the constructor, `getClass().getGenericSuperclass()` reads the retained `ParameterizedType` metadata.
+
+---
+
+## Anonymous Subclass Syntax
+
+An **anonymous subclass** declares and instantiates an unnamed class in a single statement using `{}` right after the constructor:
+
+```java
+// Creates an anonymous subclass of TypeRef<List<String>> and instantiates it
+TypeRef<List<String>> ref = new TypeRef<List<String>>() {
+    // optional class body / overrides
+};
+```
+
+### Key Differences: Anonymous Subclass vs. Array Initialization
+
+While both use `{}` with `new`, they are completely separate syntax constructs:
+
+| Feature | Anonymous Subclass Syntax | Array Initializer Syntax |
+| --- | --- | --- |
+| **Example** | `new Thread() { public void run() {} }` | `new int[] { 1, 2, 3 }` |
+| **Inside `{}`** | Class body code (fields, methods) | Data elements/expressions |
+| **Result** | Creates an unnamed subclass instance | Creates and populates an array |
+
+## Java Reflection
+
+**Java Reflection** is an API (`java.lang.reflect` package) that allows a running Java program to inspect, interrogate, and modify the internal structure and behavior of classes, interfaces, fields, methods, constructors, and annotations at **runtime**—even those that are `private`.
+
+---
+
+## 1. Important Reflection Classes You Need to Know
+
+All reflection operations start from **`java.lang.Class<T>`**, which is the entry point to inspect any class at runtime.
+
+| Class | Package | What It Represents / Does |
+| --- | --- | --- |
+| **`Class<T>`** | `java.lang` | Represents a class or interface at runtime. Used to query methods, fields, constructors, annotations, and superclasses. |
+| **`Field`** | `java.lang.reflect` | Represents a member variable (field). Allows reading (`get()`) or setting (`set()`) values dynamically, even `private` fields via `setAccessible(true)`. |
+| **`Method`** | `java.lang.reflect` | Represents a method. Allows invoking the method dynamically (`invoke(target, args)`). |
+| **`Constructor<T>`** | `java.lang.reflect` | Represents a constructor. Used to instantiate objects dynamically (`newInstance(args)`). |
+| **`Type`** | `java.lang.reflect` | The common superinterface for all types in Reflection (classes, parameterized generic types, arrays, type variables). |
+| **`ParameterizedType`** | `java.lang.reflect` | Subinterface of `Type` representing generic types with actual type arguments (e.g., `List<String>`). Used to retrieve generic type parameters at runtime. |
+| **`Annotation`** | `java.lang.annotation` | Represents an annotation attached to a class, method, field, or parameter. Checked via `isAnnotationPresent()` and `getAnnotation()`. |
+| **`Modifier`** | `java.lang.reflect` | Utility class to decode access flags (`public`, `private`, `static`, `final`, etc.) on classes or members. |
+
+---
+
+## 2. What are `Field` and `Type`?
+
+### `Field` Class
+
+A `Field` object provides metadata about a single field of a class or interface and dynamic access to its value on a target instance:
+
+```java
+public class User {
+    private String name = "Furkan";
+}
+
+// Reflection inspection & modification:
+User user = new User();
+Class<?> clazz = user.getClass();
+
+Field nameField = clazz.getDeclaredField("name");
+nameField.setAccessible(true); // bypass private access check
+
+String value = (String) nameField.get(user); // "Furkan"
+nameField.set(user, "NewName");             // Modifies private field value directly!
+```
+
+### `Type` Interface
+
+`Type` is the top-level interface introduced in Java 5 to support the **generic type system**.
+
+```none
+                     Type (Interface)
+                       |
+     +-----------------+-----------------+
+     |                                   |
+Class<?> (raw type)             ParameterizedType (generics e.g. List<User>)
+```
+
+* `Class<?>` implements `Type` (representing non-generic or raw types like `String.class`).
+* `ParameterizedType` represents generic types (e.g., `List<User>`). Calling `parameterizedType.getActualTypeArguments()` returns the actual generic parameters (`[User.class]`).
+
+---
+
+## 3. Do Spring Boot Annotations Work with Reflection?
+
+**Yes, absolutely.** Reflection is the core underlying engine of the **Spring Framework** and **Spring Boot**.
+
+### How Spring Uses Reflection with Annotations
+
+1. **Component Scanning & Bean Creation (`@Component`, `@Service`, `@Repository`, `@Controller`):**
+   Spring scans the classpath at startup, uses Reflection to find classes annotated with `@Component`, inspects their `Constructor`s, and instantiates them via `Constructor.newInstance()`.
+
+2. **Dependency Injection (`@Autowired`, `@Value`):**
+   Spring inspects fields marked with `@Autowired`. Using Reflection (`field.setAccessible(true)` and `field.set(bean, dependency)`), Spring injects dependencies into `private` fields without needing getters or setters.
+
+3. **Request Mapping & Routing (`@GetMapping`, `@PostMapping`):**
+   Spring Web scans controller classes for methods annotated with `@GetMapping("/path")`. When an HTTP request comes in, Spring finds the corresponding `Method` object and executes it via `method.invoke(controllerBean, args)`.
+
+4. **Aspect-Oriented Programming & Proxies (`@Transactional`):**
+   Spring creates dynamic JDK proxies (`java.lang.reflect.Proxy`) or CGLIB proxies around beans to intercept method invocations using Reflection, enabling features like declarative transaction management.
+
+---
+
+## Summary of Reflection Uses & Trade-offs
+
+| Pros | Cons |
+| --- | --- |
+| Enables frameworks (Spring, JUnit, Jackson, Hibernate). | **Performance Overhead:** Bypasses JVM optimizations (JIT inline). |
+| Enables dynamic behavior and runtime plugin architectures. | **Security/Encapsulation Risk:** Can break `private` encapsulation. |
+| Inspects metadata & annotations without hardcoded types. | **Compile-time Safety Lost:** Errors shift from compile-time to runtime (`NoSuchFieldException`). |
+
+## Static and Default Methods in Java Interfaces
+
+Before Java 8, interfaces could **only** contain abstract methods (no method bodies) and public static final constants. Java 8 introduced **default** and **static** methods inside interfaces.
+
+---
+
+### 1. Default Methods (`default`)
+
+A `default` method provides a **default implementation** inside an interface. Classes implementing the interface inherit this implementation automatically but can choose to override it.
+
+```java
+public interface Vehicle {
+    void drive(); // abstract method
+
+    // Default method
+    default void startEngine() {
+        System.out.println("Engine started...");
+    }
+}
+```
+
+#### Why were Default Methods introduced?
+
+* **Backward Compatibility (Interface Evolution):** Allowed Java library maintainers (like the JDK team) to add new methods to existing interfaces (e.g., adding `.stream()` or `.forEach()` to `java.util.Collection`) **without breaking** millions of existing classes that implemented those interfaces.
+
+---
+
+### 2. Static Methods (`static`)
+
+A `static` method belongs to the interface itself, not to any implementing object. It **cannot be overridden** by implementing classes and is invoked directly on the interface name.
+
+```java
+public interface Vehicle {
+    static boolean isVehicle(Object obj) {
+        return obj instanceof Vehicle;
+    }
+}
+
+// Invocation
+boolean result = Vehicle.isVehicle(myCar);
+```
+
+#### Why use Static Methods in Interfaces?
+
+* **Utility Methods:** Keeps helper/factory methods closely tied to the interface instead of putting them into a separate helper class (e.g., `List.of(...)`, `Comparator.comparing(...)`).
+
+---
+
+## Why "Constant Interface" is an Anti-Pattern
+
+The **Constant Interface Anti-Pattern** occurs when an interface is created *solely* to define constants, and classes implement that interface just to use those constants without qualifying them with the interface name:
+
+```java
+// ❌ ANTI-PATTERN: Constant Interface
+public interface AppConstants {
+    double PI = 3.14159;
+    int MAX_USERS = 100;
+}
+
+public class UserService implements AppConstants {
+    public void process() {
+        if (userCount > MAX_USERS) { ... } // uses MAX_USERS directly
+    }
+}
+```
+
+### Why is this bad?
+
+1. **Pollutes Class API:** Implementing an interface makes its constants part of the class’s **public API contract**. Any subclass or consumer of `UserService` will see `MAX_USERS` and `PI` as members of `UserService`.
+2. **Leaks Implementation Details:** How a class calculates a value is an internal detail. Implementing an interface exposes those constants externally forever.
+3. **Binary Incompatibility:** If future code removes or renames constants in the interface, it breaks all implementing classes.
+4. **Misuses Inheritance:** Interfaces are meant to define **types and behaviors** ("is-a" or "can-do"), not to share static data.
+
+---
+
+## The Better Alternative: Utility Class with Private Constructor
+
+Instead of a constant interface, define a `final` class with a `private` constructor holding `public static final` variables:
+
+```java
+// ✅ RECOMMENDED: Utility class with private constructor
+public final class AppConstants {
+
+    // Private constructor prevents instantiation
+    private AppConstants() {
+        throw new UnsupportedOperationException("Utility class cannot be instantiated");
+    }
+
+    public static final double PI = 3.14159;
+    public static final int MAX_USERS = 100;
+}
+```
+
+### Why this approach is superior
+
+* **Cannot be instantiated:** The `private` constructor prevents `new AppConstants()`.
+
+* **Cannot be subclassed:** `final` prevents inheritance.
+* **Does not leak into APIs:** Classes use constants explicitly via `AppConstants.MAX_USERS` or via `import static`:
+
+```java
+import static com.example.AppConstants.MAX_USERS;
+
+public class UserService {
+    public void process() {
+        if (userCount > MAX_USERS) { ... }
+    }
+}
+```
+
+---
+
+## Summary Comparison
+
+| Strategy | Recommended? | Key Characteristics |
+| --- | --- | --- |
+| **Constant Interface** | ❌ **Anti-Pattern** | Pollutes implementing classes' public APIs; misuses interfaces. |
+| **`final` Utility Class** | ✅ **Best Practice** | Private constructor prevents `new`; constants accessed via class name or static import. |
+| **`enum`** | ✅ **Best Practice** | Ideal when constants represent a fixed, type-safe set of related domain values (e.g., `HttpStatus`, `DayOfWeek`). |
+
+## Java Enums
+
+An **`enum`** (short for *enumeration*) is a special class in Java introduced in Java 5 that represents a **group of unchangeable, fixed constants** (like days of the week, compass directions, or HTTP status codes).
+
+---
+
+### 1. Basic Enum Syntax
+
+By default, enum constants are `public static final`:
+
+```java
+public enum Day {
+    MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY
+}
+```
+
+Usage:
+
+```java
+Day today = Day.MONDAY;
+
+if (today == Day.FRIDAY) {
+    System.out.println("Weekend is near!");
+}
+```
+
+---
+
+### 2. Key Features of Java Enums
+
+In Java, enums are much more powerful than simple integer constants in C or C++. In Java, an **enum is a full-fledged class**:
+
+* **Type-Safe:** You cannot assign any value outside the declared enum constants (prevents invalid state bugs).
+* **Can have Fields, Constructors, and Methods:** Enums can carry state and custom logic.
+* **Inherits from `java.lang.Enum`:** Automatically gets built-in methods like `.name()`, `.ordinal()`, and `.compareTo()`.
+* **Cannot be Instantiated directly:** The constructor is implicitly `private`.
+* **Cannot Extend other classes:** Since all enums implicitly extend `java.lang.Enum` (Java does not support multiple class inheritance).
+* **Can Implement Interfaces:** Enums can implement one or more interfaces.
+
+---
+
+### 3. Enum with Fields, Constructors, and Methods
+
+You can attach properties and methods to each enum constant:
+
+```java
+public enum HttpStatus {
+    OK(200, "OK"),
+    NOT_FOUND(404, "Not Found"),
+    INTERNAL_SERVER_ERROR(500, "Internal Server Error");
+
+    private final int code;
+    private final String message;
+
+    // Constructor MUST be private (or package-private)
+    HttpStatus(int code, String message) {
+        this.code = code;
+        this.message = message;
+    }
+
+    public int getCode() {
+        return code;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public boolean isError() {
+        return code >= 400;
+    }
+}
+```
+
+Usage:
+
+```java
+HttpStatus status = HttpStatus.NOT_FOUND;
+
+System.out.println(status.getCode());    // 404
+System.out.println(status.getMessage()); // "Not Found"
+System.out.println(status.isError());    // true
+```
+
+---
+
+### 4. Built-in Utility Methods
+
+Every Java enum automatically comes with useful methods:
+
+```java
+// 1. values() - Returns an array of all enum constants in order
+for (Day d : Day.values()) {
+    System.out.println(d);
+}
+
+// 2. valueOf(String) - Converts String to Enum constant (throws IllegalArgumentException if invalid)
+Day d = Day.valueOf("MONDAY");
+
+// 3. name() - Returns exact name as declared
+String name = Day.MONDAY.name(); // "MONDAY"
+
+// 4. ordinal() - Returns 0-based declaration index (use cautiously)
+int index = Day.MONDAY.ordinal(); // 0
+```
+
+---
+
+### 5. `EnumSet` and `EnumMap`
+
+Java provides highly optimized collection classes tailored specifically for enums:
+
+* **`EnumSet`:** Bit-vector-based `Set` implementation for enums. Extremely fast and memory efficient.
+
+  ```java
+  Set<Day> weekend = EnumSet.of(Day.SATURDAY, Day.SUNDAY);
+  ```
+
+* **`EnumMap`:** Array-based `Map` implementation where keys are enum constants. Much faster than a standard `HashMap`.
+
+  ```java
+  Map<HttpStatus, String> responses = new EnumMap<>(HttpStatus.class);
+  responses.put(HttpStatus.OK, "Success body");
+  ```
+
+---
+
+### When to use Enums?
+
+Use an `enum` whenever you need to represent a **fixed, known set of related constant values** (e.g., user roles, application states, file permissions, payment methods).
