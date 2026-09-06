@@ -58,4 +58,12 @@ public class AppTest {
         // the numbers are different.
         assertThat(actual).isEqualByComparingTo(expected);
     }
+
+    @Test
+    public void givenPositiveInteger_whenCalledreverseFirstAndLastDigits_thenDigitsReversed() {
+        int input = 12345;
+        int expected = 52341;
+        int actual = IntegerUtils.reverseFirstAndLastDigits(input);
+        assertThat(actual).isEqualTo(expected);
+    }
 }

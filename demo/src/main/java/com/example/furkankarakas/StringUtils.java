@@ -4,7 +4,7 @@ import java.util.Optional;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class StringUtils {
+public final class StringUtils {
     public static boolean isEmpty(String str) {
         return Optional.ofNullable(str).map(s -> Optional.of(s.trim())).filter(s -> !s.isEmpty()).isEmpty();
     }
