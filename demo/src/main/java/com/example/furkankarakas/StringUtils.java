@@ -6,7 +6,7 @@ import java.util.stream.Collectors;
 
 public final class StringUtils {
     public static boolean isEmpty(String str) {
-        return Optional.ofNullable(str).map(s -> Optional.of(s.trim())).filter(s -> !s.isEmpty()).isEmpty();
+        return Optional.ofNullable(str).map(s -> s.trim()).filter(s -> !s.isEmpty()).isEmpty();
     }
 
     public static char[] toCharArray(String str) {
